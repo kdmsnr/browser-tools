@@ -64,3 +64,10 @@ Regenerate userscript after metadata changes:
 ```sh
 make userscript
 ```
+
+## ChangeLog
+
+- 1.0.5: Fix watched-item hiding for TVer’s updated DOM.
+- 1.0.4: Fix bugs.
+- 1.0.3: Fix watched-item hiding for TVer’s updated DOM.
+- 1.0.2: Update for TVer site UI changes. No other changes.

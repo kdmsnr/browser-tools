@@ -14,7 +14,10 @@
     const { featureEnabled = true, doc = document } = options;
 
     getEpisodeLinks(doc).forEach((anchor) => {
-      const progressBar = anchor.querySelector('span[class^="ProgressBar_progress"]');
+      const progressBar = anchor.querySelector(
+        'span[class^="ProgressBar_progress"], span[class*=" ProgressBar_progress"], ' +
+        'span[class^="Thumbnail_progress__"], span[class*=" Thumbnail_progress__"]'
+      );
       const listItem = anchor.closest('li');
       const isWatched = progressBar && progressBar.style.width === '100%';
 
