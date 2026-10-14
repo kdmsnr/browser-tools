@@ -5,6 +5,7 @@ if (!root.__tverWatchedRemoverInitialized) {
 
   let observer;
   let featureEnabled = true;
+  let settings = root.TVerWatchedProgramRemoverCore.normalizeSettings();
   let scheduled = false;
 
   function isTargetPage() {
@@ -15,7 +16,7 @@ if (!root.__tverWatchedRemoverInitialized) {
     const core = root.TVerWatchedProgramRemoverCore;
     if (!core) return;
     if (!isTargetPage()) return;
-    core.applyWatchedVisibility({ featureEnabled });
+    core.applyWatchedVisibility({ featureEnabled, ...settings });
   }
 
   function scheduleApplyVisibility() {
@@ -47,8 +48,19 @@ if (!root.__tverWatchedRemoverInitialized) {
     }
   });
 
-  chrome.storage.sync.get(['featureEnabled'], (result) => {
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'sync') return;
+    if (changes.featureEnabled) featureEnabled = changes.featureEnabled.newValue ?? true;
+    for (const key of Object.keys(settings)) {
+      if (changes[key]) settings[key] = changes[key].newValue;
+    }
+    settings = root.TVerWatchedProgramRemoverCore.normalizeSettings(settings);
+    applyVisibility();
+  });
+
+  chrome.storage.sync.get(['featureEnabled', ...Object.keys(settings)], (result) => {
     featureEnabled = result.featureEnabled ?? true;
+    settings = root.TVerWatchedProgramRemoverCore.normalizeSettings(result);
     initObserver();
     applyVisibility();
   });

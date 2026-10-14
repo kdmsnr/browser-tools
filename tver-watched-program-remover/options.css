@@ -1,0 +1,16 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; padding: 32px 24px; font-size: 15px; line-height: 1.7; }
+main { max-width: 640px; margin: auto; }
+h1 { font-size: 22px; line-height: 1.4; }
+label { display: block; font-weight: 600; margin-top: 24px; }
+p { color: light-dark(#505050, #bbb); }
+input, textarea, button { font: inherit; border: 1px solid light-dark(#aaa, #777); border-radius: 6px; padding: 8px 12px; }
+input { width: 80px; }
+.threshold { margin-top: 8px; }
+textarea { display: block; box-sizing: border-box; width: 100%; margin-top: 8px; font-family: monospace; font-size: 13px; }
+details { margin-top: 28px; }
+summary, button { cursor: pointer; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+button[type="submit"] { background: #176e48; color: white; border-color: #176e48; }
+button:disabled { opacity: .5; cursor: default; }
+#status { min-height: 1.7em; }

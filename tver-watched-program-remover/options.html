@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TVer Watched Program Remover 設定</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>TVer Watched Program Remover</h1>
+    <p>お気に入り一覧で非表示にする条件を設定します。</p>
+    <form id="settings">
+      <label for="threshold">非表示にする進捗率</label>
+      <div class="threshold"><input id="threshold" type="number" min="1" max="100" step="1" required aria-describedby="threshold-help"> %以上</div>
+      <p id="threshold-help">既定値は100%です。95%にすると、95%以上視聴したエピソードを非表示にします。視聴バーがないエピソードは表示します。</p>
+      <details>
+        <summary>詳細設定</summary>
+        <label for="selector">視聴バーのCSSセレクター</label>
+        <textarea id="selector" rows="5" spellcheck="false" required aria-describedby="selector-help"></textarea>
+        <p id="selector-help">通常は変更不要です。TVerのUI変更で動かなくなった場合に、視聴率を幅（%）で示す要素のセレクターを指定できます。</p>
+      </details>
+      <div class="actions">
+        <button type="submit" id="save" disabled>保存</button>
+        <button type="button" id="reset" disabled>既定値に戻す</button>
+      </div>
+      <p id="status" role="status" aria-live="polite"></p>
+    </form>
+  </main>
+  <script src="watched-core.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

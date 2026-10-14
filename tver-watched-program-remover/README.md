@@ -26,6 +26,15 @@ Load unpacked in Chrome:
 3. Click "Load unpacked"
 4. Select this project directory
 
+### Options
+
+Right-click the extension icon and select **Options**.
+
+- **Progress threshold**: Hide episodes whose progress is at or above this percentage (1–100). The default is 100%.
+- **Progress bar CSS selector** (advanced): Override the selector when TVer's UI changes. The default supports both the current and previous progress bars.
+
+Save to apply changes to open TVer favorites pages. **Restore defaults** saves the original settings immediately. Episodes without a progress bar remain visible. These options are available in the Chrome extension; the userscript continues to use the defaults.
+
 ## Tampermonkey
 
 Build the userscript:
@@ -67,6 +76,7 @@ make userscript
 
 ## ChangeLog
 
+- 1.1.0: Add Chrome extension options for the progress threshold and progress bar CSS selector. Keep existing defaults.
 - 1.0.5: Fix watched-item hiding for TVer’s updated DOM.
 - 1.0.4: Fix bugs.
 - 1.0.3: Fix watched-item hiding for TVer’s updated DOM.
