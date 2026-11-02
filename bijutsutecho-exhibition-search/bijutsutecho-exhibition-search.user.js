@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         美術手帖 展覧会検索
 // @namespace    https://kdmsnr.com
-// @version      1.6.0
+// @version      1.7.1
 // @description  指定地域の展覧会検索に今日の日付を設定し、一覧を画面幅に広げます。
 // @match        https://bijutsutecho.com/exhibitions/search*
 // @run-at       document-start
@@ -52,29 +52,17 @@
       margin-left: 0;
     }
 
-    .bt-favorites-option .bt-favorites-toggle {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 14px;
-      cursor: pointer;
-    }
-
-    .bt-favorites-toggle input {
-      appearance: auto;
-      width: 16px;
-      height: 16px;
-      margin: 0;
-      opacity: 1;
-      position: static;
-    }
-
     .bt-favorites-list:not(:empty) {
       margin-bottom: 48px;
     }
 
     .bt-favorites-first .l_main-sidebar__main .exhibitions_items:not(.bt-favorites-list)
       > .exhibitions_item:has(button[title="行きたいを解除する"]) {
+      display: none;
+    }
+
+    .bt-hide-visited .l_main-sidebar__main .exhibitions_items
+      > .exhibitions_item:has(button[title="行ったを解除する"]) {
       display: none;
     }
 
@@ -116,23 +104,19 @@
     }
   `;
   document.documentElement.appendChild(style);
+  document.documentElement.classList.add('bt-hide-visited');
 
   function setupFavorites() {
     const listSelector = '.l_main-sidebar__main .exhibitions_items:not(.bt-favorites-list)';
     const favoriteSelector = 'button[title="行きたいを解除する"]';
+    const visitedSelector = 'button[title="行ったを解除する"]';
     const favoriteList = document.createElement('div');
     favoriteList.className = 'exhibitions_items bt-favorites-list';
 
-    const option = document.createElement('li');
-    option.className = 'c_exhibitions-search__panel-cond bt-favorites-option';
-    const toggle = document.createElement('label');
-    toggle.className = 'bt-favorites-toggle';
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = true;
-    toggle.append(checkbox, document.createTextNode('お気に入りを上にする'));
-    option.append(toggle);
-
+    let option;
+    let visitedOption;
+    let favoritesEnabled = true;
+    let showVisited = false;
     let scheduled = false;
     let displayedCards = [];
     let displayedMarkup = [];
@@ -172,11 +156,42 @@
       return copy;
     }
 
+    function createOption(template, className, id, text, checked, onChange) {
+      const item = template.cloneNode(true);
+      item.classList.add('bt-search-option', className);
+      const input = item.querySelector('input[type="checkbox"]');
+      const label = item.querySelector('label');
+      if (!input || !label) return null;
+
+      input.id = id;
+      input.removeAttribute('name');
+      input.removeAttribute('value');
+      input.checked = checked;
+      label.htmlFor = id;
+      [...label.childNodes].filter((node) => node.nodeType === Node.TEXT_NODE)
+        .forEach((node) => node.remove());
+      label.append(document.createTextNode(text));
+      input.addEventListener('change', () => {
+        onChange(input.checked);
+        scheduleUpdate();
+      });
+      return item;
+    }
+
     function update() {
       const endedOption = document.querySelector('#sp-exhibitions-search-cond-6')
         ?.closest('li.c_exhibitions-search__panel-cond');
-      if (endedOption && option.previousElementSibling !== endedOption) {
+      if (endedOption && !option) {
+        option = createOption(endedOption, 'bt-favorites-option', 'bt-favorites-first',
+          'お気に入りを上にする', favoritesEnabled, (checked) => { favoritesEnabled = checked; });
+        visitedOption = createOption(endedOption, 'bt-visited-option', 'bt-show-visited',
+          '行った展覧会を表示', showVisited, (checked) => { showVisited = checked; });
+      }
+      if (endedOption && option && option.previousElementSibling !== endedOption) {
         endedOption.insertAdjacentElement('afterend', option);
+      }
+      if (option?.isConnected && visitedOption && visitedOption.previousElementSibling !== option) {
+        option.insertAdjacentElement('afterend', visitedOption);
       }
 
       const lists = [...document.querySelectorAll(listSelector)];
@@ -185,8 +200,9 @@
         firstList.before(favoriteList);
       }
 
-      document.documentElement.classList.toggle('bt-favorites-first', checkbox.checked);
-      if (!checkbox.checked || !firstList) {
+      document.documentElement.classList.toggle('bt-favorites-first', favoritesEnabled);
+      document.documentElement.classList.toggle('bt-hide-visited', !showVisited);
+      if (!favoritesEnabled || !firstList) {
         if (displayedCards.length) favoriteList.replaceChildren();
         displayedCards = [];
         displayedMarkup = [];
@@ -195,7 +211,8 @@
 
       const favorites = lists.flatMap((list) =>
         [...list.querySelectorAll(':scope > .exhibitions_item')]
-          .filter((card) => card.querySelector(favoriteSelector))
+          .filter((card) => card.querySelector(favoriteSelector) &&
+            (showVisited || !card.querySelector(visitedSelector)))
       );
       const markup = favorites.map((card) => card.outerHTML);
       if (favorites.length === displayedCards.length && favorites.every((card, index) =>
@@ -206,17 +223,15 @@
       displayedMarkup = markup;
     }
 
-    checkbox.addEventListener('change', scheduleUpdate);
-
     const observer = new MutationObserver((mutations) => {
       const relevant = mutations.some((mutation) => {
         const target = mutation.target.nodeType === Node.ELEMENT_NODE
           ? mutation.target
           : mutation.target.parentElement;
-        if (target?.closest('.bt-favorites-list, .bt-favorites-option')) return false;
+        if (target?.closest('.bt-favorites-list, .bt-search-option')) return false;
         if (mutation.type === 'attributes') return Boolean(target?.closest(listSelector));
         const changedNodes = [...mutation.addedNodes, ...mutation.removedNodes];
-        return changedNodes.some((node) => node !== favoriteList && node !== option);
+        return changedNodes.some((node) => node !== favoriteList && node !== option && node !== visitedOption);
       });
       if (relevant) scheduleUpdate();
     });
