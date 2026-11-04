@@ -75,7 +75,6 @@
           width: 16px;
           height: 16px;
           margin: 0;
-          accent-color: #009f66;
           cursor: pointer;
         }
         #${controlId} input[type="number"] {
@@ -90,7 +89,7 @@
           font: inherit;
         }
         #${controlId} input:focus-visible {
-          outline: 2px solid #009f66;
+          outline: auto;
           outline-offset: 2px;
         }
       `;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Remove Watched Programs for TVer
 // @namespace    https://kdmsnr.com
-// @version      1.3.0
+// @version      1.3.1
 // @description  Remove watched programs from TVer's My Page
 // @author       kdmsnr
 // @match        https://tver.jp/*
@@ -173,7 +173,6 @@
           width: 16px;
           height: 16px;
           margin: 0;
-          accent-color: #009f66;
           cursor: pointer;
         }
         #${controlId} input[type="number"] {
@@ -188,7 +187,7 @@
           font: inherit;
         }
         #${controlId} input:focus-visible {
-          outline: 2px solid #009f66;
+          outline: auto;
           outline-offset: 2px;
         }
       `;

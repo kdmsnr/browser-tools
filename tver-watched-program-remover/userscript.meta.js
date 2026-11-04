@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Remove Watched Programs for TVer
 // @namespace    https://kdmsnr.com
-// @version      1.3.0
+// @version      1.3.1
 // @description  Remove watched programs from TVer's My Page
 // @author       kdmsnr
 // @match        https://tver.jp/*
