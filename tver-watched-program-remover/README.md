@@ -10,7 +10,7 @@ This repository contains:
 ## Files
 
 - `watched-core.js`: Shared DOM query and watched-item visibility logic
-- `duration-filter.js`: Shared on-page controls for short-video visibility
+- `duration-filter.js`: Shared on-page controls for watched- and short-video visibility
 - `main.js`: Chrome content script entry point
 - `background.js`: Chrome action toggle and state persistence
 - `manifest.json`: Chrome extension manifest
@@ -36,13 +36,17 @@ Right-click the extension icon and select **Options**.
 
 Save to apply changes to open TVer favorites pages. **Restore defaults** saves the original settings immediately. These progress options are available in the Chrome extension; the userscript uses the default progress settings.
 
-## Short Video Visibility
+## On-page Visibility Controls
 
-On the favorites page, **短い動画を表示** appears next to TVer's **本編のみ表示** checkbox in both versions. It is checked by default. Uncheck it to hide videos whose displayed runtime is at or below the selected number of minutes (10 minutes by default), including unwatched videos. Check it again to restore short videos that are not hidden by the watched-progress filter.
+On the favorites page, **視聴済みの動画を表示** and **短い動画を表示** appear next to TVer's **本編のみ表示** checkbox in both versions.
+
+**視聴済みの動画を表示** is unchecked by default. Check it to display episodes that meet the watched-progress threshold. The short-video filter continues to apply, so watched videos at or below the duration limit stay hidden when **短い動画を表示** is unchecked.
+
+**短い動画を表示** is checked by default. Uncheck it to hide videos whose displayed runtime is at or below the selected number of minutes (10 minutes by default), including unwatched videos. Check it again to restore short videos that are not hidden by the watched-progress filter.
 
 The minute limit can be changed on the page. Videos with an unknown runtime remain visible unless watched progress hides them. This filter uses the displayed duration label, not an exact playback duration.
 
-The Chrome extension saves this preference in Chrome sync storage. The userscript saves it in this browser's TVer local storage. These preferences are independent when using both versions.
+The Chrome extension saves these preferences in Chrome sync storage. The userscript saves them in this browser's TVer local storage. These preferences are independent when using both versions. The Chrome extension's toolbar button still toggles all filtering on or off.
 
 ## Tampermonkey
 
@@ -85,6 +89,7 @@ make userscript
 
 ## ChangeLog
 
+- 1.3.0: Add a separate on-page checkbox to show watched videos while keeping the short-video filter active.
 - 1.2.0: Add a short-video visibility checkbox and configurable duration limit beside TVer's main-episode filter in both versions.
 - 1.1.0: Add Chrome extension options for the progress threshold and progress bar CSS selector. Keep existing defaults.
 - 1.0.5: Fix watched-item hiding for TVer’s updated DOM.

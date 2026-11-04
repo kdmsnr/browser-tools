@@ -8,12 +8,13 @@
     const core = root.TVerWatchedProgramRemoverCore;
     let settings = core.normalizeSettings();
     let container;
+    let watchedCheckbox;
     let checkbox;
     let minutes;
 
     function remove() {
       container?.remove();
-      container = checkbox = minutes = undefined;
+      container = watchedCheckbox = checkbox = minutes = undefined;
     }
 
     function validMinutes(value) {
@@ -24,6 +25,7 @@
       const value = minutes.valueAsNumber;
       if (!validMinutes(value)) minutes.value = String(settings.shortVideoMinutes);
       onChange({
+        showWatchedVideos: watchedCheckbox.checked,
         showShortVideos: checkbox.checked,
         shortVideoMinutes: validMinutes(value) ? value : settings.shortVideoMinutes,
       });
@@ -33,8 +35,7 @@
       container = doc.createElement('div');
       container.id = controlId;
       container.setAttribute('role', 'group');
-      container.setAttribute('aria-label', '短い動画の表示設定');
-      container.title = 'チェックを外すと、未視聴も含めて指定時間以下の動画を隠します。';
+      container.setAttribute('aria-label', '動画の表示設定');
 
       const style = doc.createElement('style');
       style.textContent = `
@@ -60,6 +61,13 @@
           gap: 6px;
           margin: 0;
           white-space: nowrap;
+        }
+        #${controlId} .short-controls {
+          display: inline-flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 6px 8px;
+          min-width: 0;
         }
         #${controlId} label { cursor: pointer; }
         #${controlId} input[type="checkbox"] {
@@ -87,7 +95,18 @@
         }
       `;
 
+      const watchedLabel = doc.createElement('label');
+      watchedLabel.title = 'チェックを入れると視聴済みの動画を表示します。短い動画の表示設定も適用されます。';
+      watchedCheckbox = doc.createElement('input');
+      watchedCheckbox.type = 'checkbox';
+      watchedCheckbox.id = `${controlId}-watched`;
+      watchedLabel.htmlFor = watchedCheckbox.id;
+      const watchedText = doc.createElement('span');
+      watchedText.textContent = '視聴済みの動画を表示';
+      watchedLabel.append(watchedCheckbox, watchedText);
+
       const label = doc.createElement('label');
+      label.title = 'チェックを外すと、未視聴も含めて指定時間以下の動画を隠します。';
       checkbox = doc.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.id = `${controlId}-show`;
@@ -108,9 +127,13 @@
       suffix.textContent = '分以下';
       durationLimit.append(minutes, suffix);
 
+      watchedCheckbox.addEventListener('change', notifyChange);
       checkbox.addEventListener('change', notifyChange);
       minutes.addEventListener('change', notifyChange);
-      container.append(style, label, durationLimit);
+      const shortControls = doc.createElement('span');
+      shortControls.className = 'short-controls';
+      shortControls.append(label, durationLimit);
+      container.append(style, watchedLabel, shortControls);
       slot.append(container);
     }
 
@@ -130,6 +153,7 @@
         remove();
         mount(slot);
       }
+      watchedCheckbox.checked = settings.showWatchedVideos;
       checkbox.checked = settings.showShortVideos;
       // Mutation observers and userscript polling must not overwrite a number being edited.
       if (doc.activeElement !== minutes || thresholdChanged) {

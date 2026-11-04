@@ -20,6 +20,11 @@ test('defaults and invalid saved settings preserve the original behavior', () =>
   assert.equal(core.normalizeSettings({progressThreshold: 95}).progressThreshold, 95);
   assert.equal(core.normalizeSettings({progressSelector: '  .custom  '}).progressSelector, '.custom');
   assert.equal(core.normalizeSettings({progressSelector: ''}).progressSelector, core.defaults.progressSelector);
+  assert.equal(core.normalizeSettings().showWatchedVideos, false);
+  assert.equal(core.normalizeSettings({showWatchedVideos: true}).showWatchedVideos, true);
+  for (const value of [false, 'true', 1, null, undefined, {}, []]) {
+    assert.equal(core.normalizeSettings({showWatchedVideos: value}).showWatchedVideos, false);
+  }
   assert.equal(core.normalizeSettings().showShortVideos, true);
   assert.equal(core.normalizeSettings({showShortVideos: false}).showShortVideos, false);
   for (const value of ['false', 0, null, undefined]) {
@@ -48,9 +53,13 @@ test('content script loads settings and reapplies sync changes, deletion and tog
       storage: {
         onChanged: {addListener: fn => {onChanged = fn;}},
         sync: {get: (keys, cb) => {
+          assert.ok(keys.includes('showWatchedVideos'));
           assert.ok(keys.includes('showShortVideos'));
           assert.ok(keys.includes('shortVideoMinutes'));
-          cb({progressThreshold: 95, progressSelector: '.custom', showShortVideos: false, shortVideoMinutes: 8});
+          cb({
+            progressThreshold: 95, progressSelector: '.custom', showWatchedVideos: true,
+            showShortVideos: false, shortVideoMinutes: 8,
+          });
         }},
       },
     },
@@ -58,19 +67,28 @@ test('content script loads settings and reapplies sync changes, deletion and tog
   vm.runInContext(read('main.js'), context);
   assert.equal(calls.at(-1).progressThreshold, 95);
   assert.equal(calls.at(-1).progressSelector, '.custom');
+  assert.equal(calls.at(-1).showWatchedVideos, true);
   assert.equal(calls.at(-1).showShortVideos, false);
   assert.equal(calls.at(-1).shortVideoMinutes, 8);
   onChanged({progressThreshold: {newValue: 90}}, 'sync');
   assert.equal(calls.at(-1).progressThreshold, 90);
-  onChanged({showShortVideos: {newValue: true}, shortVideoMinutes: {newValue: 5}}, 'sync');
+  onChanged({
+    showWatchedVideos: {newValue: false}, showShortVideos: {newValue: true}, shortVideoMinutes: {newValue: 5},
+  }, 'sync');
+  assert.equal(calls.at(-1).showWatchedVideos, false);
   assert.equal(calls.at(-1).showShortVideos, true);
   assert.equal(calls.at(-1).shortVideoMinutes, 5);
+  onChanged({showWatchedVideos: {newValue: true}}, 'sync');
+  assert.equal(calls.at(-1).showWatchedVideos, true);
   const count = calls.length;
   onChanged({progressThreshold: {newValue: 10}}, 'local');
   assert.equal(calls.length, count);
-  onChanged({progressThreshold: {}, progressSelector: {}, showShortVideos: {}, shortVideoMinutes: {}}, 'sync');
+  onChanged({
+    progressThreshold: {}, progressSelector: {}, showWatchedVideos: {}, showShortVideos: {}, shortVideoMinutes: {},
+  }, 'sync');
   assert.equal(calls.at(-1).progressThreshold, 100);
   assert.equal(calls.at(-1).progressSelector, core.defaults.progressSelector);
+  assert.equal(calls.at(-1).showWatchedVideos, false);
   assert.equal(calls.at(-1).showShortVideos, true);
   assert.equal(calls.at(-1).shortVideoMinutes, 10);
   onChanged({featureEnabled: {newValue: false}}, 'sync');

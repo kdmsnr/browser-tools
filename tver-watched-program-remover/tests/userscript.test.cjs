@@ -76,20 +76,23 @@ function loadUserscript({ saved, rawValue, storageMode = 'available', pathname =
   };
 }
 
-test('userscript starts without Chrome APIs and restores only duration preferences', () => {
+test('userscript starts without Chrome APIs and restores display preferences without changing progress defaults', () => {
   const defaults = loadUserscript();
   assert.equal('chrome' in defaults.context, false);
   assert.equal(defaults.calls.at(-1).featureEnabled, true);
+  assert.equal(defaults.calls.at(-1).showWatchedVideos, false);
   assert.equal(defaults.calls.at(-1).showShortVideos, true);
   assert.equal(defaults.calls.at(-1).shortVideoMinutes, 10);
   assert.equal(defaults.updates.at(-1).showShortVideos, true);
 
   const restored = loadUserscript({ saved: {
+    showWatchedVideos: true,
     showShortVideos: false,
     shortVideoMinutes: 3,
     progressThreshold: 1,
     progressSelector: '.unrelated-saved-selector',
   } });
+  assert.equal(restored.calls.at(-1).showWatchedVideos, true);
   assert.equal(restored.calls.at(-1).showShortVideos, false);
   assert.equal(restored.calls.at(-1).shortVideoMinutes, 3);
   assert.equal(restored.calls.at(-1).progressThreshold, 100);
@@ -97,21 +100,37 @@ test('userscript starts without Chrome APIs and restores only duration preferenc
     restored.context.TVerWatchedProgramRemoverCore.defaults.progressSelector);
 });
 
-test('on-page changes apply immediately and persist only duration preferences', () => {
+test('previously saved short-video preferences keep their values and default to hiding watched videos', () => {
+  const runtime = loadUserscript({ saved: { showShortVideos: false, shortVideoMinutes: 3 } });
+  assert.equal(runtime.calls.at(-1).showWatchedVideos, false);
+  assert.equal(runtime.calls.at(-1).showShortVideos, false);
+  assert.equal(runtime.calls.at(-1).shortVideoMinutes, 3);
+  runtime.change({ showWatchedVideos: true });
+  assert.deepEqual(JSON.parse(runtime.stored.get(storageKey)), {
+    showWatchedVideos: true,
+    showShortVideos: false,
+    shortVideoMinutes: 3,
+  });
+});
+
+test('on-page changes apply immediately and persist only display preferences', () => {
   const runtime = loadUserscript();
   const before = runtime.calls.length;
-  runtime.change({ showShortVideos: false, shortVideoMinutes: 7 });
+  runtime.change({ showWatchedVideos: true, showShortVideos: false, shortVideoMinutes: 7 });
   assert.equal(runtime.calls.length, before + 1);
+  assert.equal(runtime.calls.at(-1).showWatchedVideos, true);
   assert.equal(runtime.calls.at(-1).showShortVideos, false);
   assert.equal(runtime.calls.at(-1).shortVideoMinutes, 7);
   assert.equal(runtime.updates.at(-1).shortVideoMinutes, 7);
   assert.deepEqual(runtime.writes.map(write => write.key), [storageKey]);
   assert.deepEqual(JSON.parse(runtime.stored.get(storageKey)), {
+    showWatchedVideos: true,
     showShortVideos: false,
     shortVideoMinutes: 7,
   });
 
   const reloaded = loadUserscript({ rawValue: runtime.stored.get(storageKey) });
+  assert.equal(reloaded.calls.at(-1).showWatchedVideos, true);
   assert.equal(reloaded.calls.at(-1).showShortVideos, false);
   assert.equal(reloaded.calls.at(-1).shortVideoMinutes, 7);
 });
@@ -120,32 +139,36 @@ test('invalid or unavailable local storage leaves controls usable with safe defa
   for (const options of [
     { rawValue: '{invalid-json' },
     { rawValue: 'null' },
-    { saved: { showShortVideos: 'false', shortVideoMinutes: 0 } },
+    { saved: { showWatchedVideos: 'true', showShortVideos: 'false', shortVideoMinutes: 0 } },
     { storageMode: 'missing' },
     { storageMode: 'throws' },
   ]) {
     const runtime = loadUserscript(options);
+    assert.equal(runtime.calls.at(-1).showWatchedVideos, false);
     assert.equal(runtime.calls.at(-1).showShortVideos, true);
     assert.equal(runtime.calls.at(-1).shortVideoMinutes, 10);
-    assert.doesNotThrow(() => runtime.change({ showShortVideos: false, shortVideoMinutes: 4 }));
+    assert.doesNotThrow(() => runtime.change({ showWatchedVideos: true, showShortVideos: false, shortVideoMinutes: 4 }));
+    assert.equal(runtime.calls.at(-1).showWatchedVideos, true);
     assert.equal(runtime.calls.at(-1).showShortVideos, false);
     assert.equal(runtime.calls.at(-1).shortVideoMinutes, 4);
   }
 });
 
-test('cross-tab duration updates and storage clearing reapply the filter', () => {
+test('cross-tab display preference updates and storage clearing reapply the filter', () => {
   const runtime = loadUserscript();
-  runtime.stored.set(storageKey, JSON.stringify({ showShortVideos: false, shortVideoMinutes: 2 }));
+  runtime.stored.set(storageKey, JSON.stringify({ showWatchedVideos: true, showShortVideos: false, shortVideoMinutes: 2 }));
   const before = runtime.calls.length;
   runtime.dispatch('storage', { key: 'unrelated-setting' });
   assert.equal(runtime.calls.length, before);
 
   runtime.dispatch('storage', { key: storageKey });
+  assert.equal(runtime.calls.at(-1).showWatchedVideos, true);
   assert.equal(runtime.calls.at(-1).showShortVideos, false);
   assert.equal(runtime.calls.at(-1).shortVideoMinutes, 2);
 
   runtime.stored.delete(storageKey);
   runtime.dispatch('storage', { key: null });
+  assert.equal(runtime.calls.at(-1).showWatchedVideos, false);
   assert.equal(runtime.calls.at(-1).showShortVideos, true);
   assert.equal(runtime.calls.at(-1).shortVideoMinutes, 10);
 });

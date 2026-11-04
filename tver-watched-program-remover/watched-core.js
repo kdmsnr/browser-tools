@@ -5,6 +5,7 @@
     progressThreshold: 100,
     progressSelector: 'span[class^="ProgressBar_progress"], span[class*=" ProgressBar_progress"], ' +
       'span[class^="Thumbnail_progress__"], span[class*=" Thumbnail_progress__"]',
+    showWatchedVideos: false,
     showShortVideos: true,
     shortVideoMinutes: 10,
   });
@@ -16,6 +17,7 @@
         threshold > 0 && threshold <= 100 ? threshold : defaults.progressThreshold,
       progressSelector: typeof settings.progressSelector === 'string' && settings.progressSelector.trim()
         ? settings.progressSelector.trim() : defaults.progressSelector,
+      showWatchedVideos: settings.showWatchedVideos === true,
       showShortVideos: typeof settings.showShortVideos === 'boolean'
         ? settings.showShortVideos : defaults.showShortVideos,
       shortVideoMinutes: Number.isInteger(settings.shortVideoMinutes) &&
@@ -48,7 +50,9 @@
 
   function applyWatchedVisibility(options = {}) {
     const { featureEnabled = true, doc = document } = options;
-    const { progressThreshold, progressSelector, showShortVideos, shortVideoMinutes } = normalizeSettings(options);
+    const {
+      progressThreshold, progressSelector, showWatchedVideos, showShortVideos, shortVideoMinutes,
+    } = normalizeSettings(options);
 
     // Invalid stored selectors fall back to the built-in selector.
     let selector = progressSelector;
@@ -66,7 +70,7 @@
       const isWatched = Number.isFinite(progress) && progress >= progressThreshold && progress <= 100;
       const duration = showShortVideos ? null : getEpisodeDurationSeconds(anchor);
       const isShortVideo = duration !== null && duration <= shortVideoMinutes * 60;
-      const shouldHide = featureEnabled && (isWatched || isShortVideo);
+      const shouldHide = featureEnabled && ((!showWatchedVideos && isWatched) || isShortVideo);
 
       (listItem || anchor).style.display = shouldHide ? 'none' : '';
       if (!shouldHide) anchor.style.display = '';

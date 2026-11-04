@@ -97,3 +97,26 @@ test('filter and feature toggles restore unwatched rows without exposing watched
   core.applyWatchedVisibility({doc, showShortVideos: false, progressSelector: '['});
   assert.deepEqual(visible(), ['none', 'none', 'none', 'none', 'none'], 'invalid selector retains watched and short filtering');
 });
+
+test('watched and short-video visibility remain independent across all checkbox combinations', () => {
+  const core = loadCore();
+  const {doc, rows} = makeDocument(core, [
+    {duration: '3分', width: '100%'}, {duration: '41分', width: '100%'},
+    {duration: '3分', width: '50%'}, {duration: '41分'},
+  ]);
+  const visible = () => rows.map(row => row.target.style.display);
+  core.applyWatchedVisibility({doc});
+  assert.deepEqual(visible(), ['none', 'none', '', ''], 'defaults preserve watched hiding');
+  for (const [showWatchedVideos, showShortVideos, expected] of [
+    [false, false, ['none', 'none', 'none', '']],
+    [false, true, ['none', 'none', '', '']],
+    [true, false, ['none', '', 'none', '']],
+    [true, true, ['', '', '', '']],
+  ]) {
+    const settings = {doc, showWatchedVideos, showShortVideos};
+    core.applyWatchedVisibility(settings);
+    assert.deepEqual(visible(), expected, JSON.stringify({showWatchedVideos, showShortVideos}));
+    core.applyWatchedVisibility({...settings, featureEnabled: false});
+    assert.deepEqual(visible(), ['', '', '', ''], 'global feature off restores every video');
+  }
+});

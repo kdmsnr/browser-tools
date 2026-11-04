@@ -12,6 +12,7 @@
       hideWatched();
       try {
         root.localStorage.setItem(storageKey, JSON.stringify({
+          showWatchedVideos: settings.showWatchedVideos,
           showShortVideos: settings.showShortVideos,
           shortVideoMinutes: settings.shortVideoMinutes,
         }));
@@ -26,6 +27,7 @@
     try {
       const saved = JSON.parse(root.localStorage.getItem(storageKey) || '{}');
       return core.normalizeSettings({
+        showWatchedVideos: saved?.showWatchedVideos,
         showShortVideos: saved?.showShortVideos,
         shortVideoMinutes: saved?.shortVideoMinutes,
       });

@@ -27,7 +27,7 @@ if (!root.__tverWatchedRemoverInitialized) {
           applyVisibility();
           chrome.storage.sync.set(changes, () => {
             if (chrome.runtime.lastError) {
-              console.warn('TVer Watched Remover: duration settings could not be saved.');
+              console.warn('TVer Watched Remover: display settings could not be saved.');
             }
           });
         },
