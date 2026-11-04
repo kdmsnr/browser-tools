@@ -20,6 +20,17 @@ test('defaults and invalid saved settings preserve the original behavior', () =>
   assert.equal(core.normalizeSettings({progressThreshold: 95}).progressThreshold, 95);
   assert.equal(core.normalizeSettings({progressSelector: '  .custom  '}).progressSelector, '.custom');
   assert.equal(core.normalizeSettings({progressSelector: ''}).progressSelector, core.defaults.progressSelector);
+  assert.equal(core.normalizeSettings().showShortVideos, true);
+  assert.equal(core.normalizeSettings({showShortVideos: false}).showShortVideos, false);
+  for (const value of ['false', 0, null, undefined]) {
+    assert.equal(core.normalizeSettings({showShortVideos: value}).showShortVideos, true);
+  }
+  assert.equal(core.normalizeSettings().shortVideoMinutes, 10);
+  assert.equal(core.normalizeSettings({shortVideoMinutes: 1}).shortVideoMinutes, 1);
+  assert.equal(core.normalizeSettings({shortVideoMinutes: 1440}).shortVideoMinutes, 1440);
+  for (const value of [0, -1, 1441, 1.5, NaN, Infinity, '10', null]) {
+    assert.equal(core.normalizeSettings({shortVideoMinutes: value}).shortVideoMinutes, 10);
+  }
 });
 
 test('content script loads settings and reapplies sync changes, deletion and toggles', () => {
@@ -36,21 +47,32 @@ test('content script loads settings and reapplies sync changes, deletion and tog
       runtime: {onMessage: {addListener: fn => {onMessage = fn;}}},
       storage: {
         onChanged: {addListener: fn => {onChanged = fn;}},
-        sync: {get: (keys, cb) => cb({progressThreshold: 95, progressSelector: '.custom'})},
+        sync: {get: (keys, cb) => {
+          assert.ok(keys.includes('showShortVideos'));
+          assert.ok(keys.includes('shortVideoMinutes'));
+          cb({progressThreshold: 95, progressSelector: '.custom', showShortVideos: false, shortVideoMinutes: 8});
+        }},
       },
     },
   });
   vm.runInContext(read('main.js'), context);
   assert.equal(calls.at(-1).progressThreshold, 95);
   assert.equal(calls.at(-1).progressSelector, '.custom');
+  assert.equal(calls.at(-1).showShortVideos, false);
+  assert.equal(calls.at(-1).shortVideoMinutes, 8);
   onChanged({progressThreshold: {newValue: 90}}, 'sync');
   assert.equal(calls.at(-1).progressThreshold, 90);
+  onChanged({showShortVideos: {newValue: true}, shortVideoMinutes: {newValue: 5}}, 'sync');
+  assert.equal(calls.at(-1).showShortVideos, true);
+  assert.equal(calls.at(-1).shortVideoMinutes, 5);
   const count = calls.length;
   onChanged({progressThreshold: {newValue: 10}}, 'local');
   assert.equal(calls.length, count);
-  onChanged({progressThreshold: {}, progressSelector: {}}, 'sync');
+  onChanged({progressThreshold: {}, progressSelector: {}, showShortVideos: {}, shortVideoMinutes: {}}, 'sync');
   assert.equal(calls.at(-1).progressThreshold, 100);
   assert.equal(calls.at(-1).progressSelector, core.defaults.progressSelector);
+  assert.equal(calls.at(-1).showShortVideos, true);
+  assert.equal(calls.at(-1).shortVideoMinutes, 10);
   onChanged({featureEnabled: {newValue: false}}, 'sync');
   assert.equal(calls.at(-1).featureEnabled, false);
   onMessage({type: 'toggleFeature', featureEnabled: true});

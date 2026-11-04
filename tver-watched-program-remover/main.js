@@ -4,6 +4,7 @@ if (!root.__tverWatchedRemoverInitialized) {
   root.__tverWatchedRemoverInitialized = true;
 
   let observer;
+  let durationFilter;
   let featureEnabled = true;
   let settings = root.TVerWatchedProgramRemoverCore.normalizeSettings();
   let scheduled = false;
@@ -15,7 +16,24 @@ if (!root.__tverWatchedRemoverInitialized) {
   function applyVisibility() {
     const core = root.TVerWatchedProgramRemoverCore;
     if (!core) return;
-    if (!isTargetPage()) return;
+    if (!isTargetPage()) {
+      durationFilter?.remove();
+      return;
+    }
+    if (!durationFilter && root.TVerWatchedProgramRemoverDurationFilter) {
+      durationFilter = root.TVerWatchedProgramRemoverDurationFilter.create({
+        onChange(changes) {
+          settings = core.normalizeSettings({ ...settings, ...changes });
+          applyVisibility();
+          chrome.storage.sync.set(changes, () => {
+            if (chrome.runtime.lastError) {
+              console.warn('TVer Watched Remover: duration settings could not be saved.');
+            }
+          });
+        },
+      });
+    }
+    durationFilter?.update(settings);
     core.applyWatchedVisibility({ featureEnabled, ...settings });
   }
 
@@ -31,7 +49,10 @@ if (!root.__tverWatchedRemoverInitialized) {
   function initObserver() {
     if (observer) return;
     observer = new MutationObserver(() => {
-      if (!isTargetPage()) return;
+      if (!isTargetPage()) {
+        durationFilter?.remove();
+        return;
+      }
       scheduleApplyVisibility();
     });
 

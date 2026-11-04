@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TVer Watched Program Remover",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true
@@ -21,7 +21,7 @@
   "content_scripts": [
     {
       "matches": ["https://tver.jp/*"],
-      "js": ["watched-core.js", "main.js"],
+      "js": ["watched-core.js", "duration-filter.js", "main.js"],
       "run_at": "document_end"
     }
   ]

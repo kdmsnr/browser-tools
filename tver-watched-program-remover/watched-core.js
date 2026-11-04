@@ -5,6 +5,8 @@
     progressThreshold: 100,
     progressSelector: 'span[class^="ProgressBar_progress"], span[class*=" ProgressBar_progress"], ' +
       'span[class^="Thumbnail_progress__"], span[class*=" Thumbnail_progress__"]',
+    showShortVideos: true,
+    shortVideoMinutes: 10,
   });
 
   function normalizeSettings(settings = {}) {
@@ -14,7 +16,25 @@
         threshold > 0 && threshold <= 100 ? threshold : defaults.progressThreshold,
       progressSelector: typeof settings.progressSelector === 'string' && settings.progressSelector.trim()
         ? settings.progressSelector.trim() : defaults.progressSelector,
+      showShortVideos: typeof settings.showShortVideos === 'boolean'
+        ? settings.showShortVideos : defaults.showShortVideos,
+      shortVideoMinutes: Number.isInteger(settings.shortVideoMinutes) &&
+        settings.shortVideoMinutes >= 1 && settings.shortVideoMinutes <= 1440
+        ? settings.shortVideoMinutes : defaults.shortVideoMinutes,
     };
+  }
+
+  function parseDurationSeconds(text) {
+    if (typeof text !== 'string') return null;
+    const match = text.match(/^\s*(?:(\d+)\s*時間\s*)?(?:(\d+)\s*分\s*)?(?:(\d+)\s*秒\s*)?$/);
+    if (!match) return null;
+    const seconds = Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0);
+    return Number.isSafeInteger(seconds) && seconds > 0 ? seconds : null;
+  }
+
+  function getEpisodeDurationSeconds(anchor) {
+    const duration = anchor.querySelector('[class^="Duration_duration__"], [class*=" Duration_duration__"]');
+    return parseDurationSeconds(duration?.textContent);
   }
 
   function getEpisodeLinks(doc = document) {
@@ -28,7 +48,7 @@
 
   function applyWatchedVisibility(options = {}) {
     const { featureEnabled = true, doc = document } = options;
-    const { progressThreshold, progressSelector } = normalizeSettings(options);
+    const { progressThreshold, progressSelector, showShortVideos, shortVideoMinutes } = normalizeSettings(options);
 
     // Invalid stored selectors fall back to the built-in selector.
     let selector = progressSelector;
@@ -44,25 +64,20 @@
       const width = progressBar?.style.width || '';
       const progress = width.endsWith('%') ? Number(width.slice(0, -1)) : NaN;
       const isWatched = Number.isFinite(progress) && progress >= progressThreshold && progress <= 100;
+      const duration = showShortVideos ? null : getEpisodeDurationSeconds(anchor);
+      const isShortVideo = duration !== null && duration <= shortVideoMinutes * 60;
+      const shouldHide = featureEnabled && (isWatched || isShortVideo);
 
-      if (isWatched) {
-        if (listItem) {
-          listItem.style.display = featureEnabled ? 'none' : '';
-        } else {
-          anchor.style.display = featureEnabled ? 'none' : '';
-        }
-      } else {
-        if (listItem) {
-          listItem.style.display = '';
-        }
-        anchor.style.display = '';
-      }
+      (listItem || anchor).style.display = shouldHide ? 'none' : '';
+      if (!shouldHide) anchor.style.display = '';
     });
   }
 
   root.TVerWatchedProgramRemoverCore = {
     defaults,
     normalizeSettings,
+    parseDurationSeconds,
+    getEpisodeDurationSeconds,
     getEpisodeLinks,
     applyWatchedVisibility,
   };
