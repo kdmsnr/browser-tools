@@ -1,6 +1,12 @@
 (function (root) {
   'use strict';
 
+  const legacyEpisodeSelector = 'a[class^="EpisodeItem_"]';
+  const episodeLinkSelector = 'a[href^="/episodes/"]';
+  const episodeSelector = `${legacyEpisodeSelector}, li > ${episodeLinkSelector}`;
+  const favoriteToolbarSelector = '[class^="FavoriteTool_standardOnly__"], [class*=" FavoriteTool_standardOnly__"]';
+  const favoriteChangesSelector = `${legacyEpisodeSelector}, ${episodeLinkSelector}, ${favoriteToolbarSelector}`;
+
   const defaults = Object.freeze({
     progressThreshold: 100,
     progressSelector: 'span[class^="ProgressBar_progress"], span[class*=" ProgressBar_progress"], ' +
@@ -40,12 +46,66 @@
   }
 
   function getEpisodeLinks(doc = document) {
-    const links = new Set();
+    return Array.from(doc.querySelectorAll(episodeSelector));
+  }
 
-    doc.querySelectorAll('a[class^="EpisodeItem_"]').forEach((link) => links.add(link));
-    doc.querySelectorAll('li > a[href^="/episodes/"]').forEach((link) => links.add(link));
+  function affectsFavorites(record, getProgressSelector) {
+    const { target, type } = record;
+    if (type === 'attributes' && record.attributeName === 'style') {
+      const progressSelector = getProgressSelector();
+      if (!progressSelector) return false;
+      const episode = target.closest(episodeSelector);
+      // Ignore display styles written by this script on the card or its list item.
+      if (!episode || target === episode) return false;
+      try {
+        return target.matches(progressSelector);
+      } catch {
+        return target.matches(defaults.progressSelector);
+      }
+    }
 
-    return [...links];
+    const element = target.nodeType === 1 ? target : target.parentElement;
+    if (element?.closest(favoriteChangesSelector)) return true;
+    if (type !== 'childList') return false;
+    for (const nodes of [record.addedNodes, record.removedNodes]) {
+      for (const node of nodes) {
+        if (node.nodeType === 1 &&
+            (node.matches(favoriteChangesSelector) || node.querySelector(favoriteChangesSelector))) return true;
+      }
+    }
+    return false;
+  }
+
+  function watchFavoriteChanges({
+    doc = document, isTargetPage, onChange, getProgressSelector = () => defaults.progressSelector,
+  }) {
+    let onFavorites = isTargetPage();
+    const target = doc.documentElement || doc.body;
+    const observer = new MutationObserver(records => {
+      if (!checkRoute() && onFavorites && records.some(record => affectsFavorites(record, getProgressSelector))) {
+        onChange();
+      }
+    });
+
+    function observe() {
+      if (!target) return;
+      observer.observe(target, onFavorites ? {
+        childList: true, subtree: true, characterData: true,
+        attributes: true, attributeFilter: ['style', 'class', 'href'],
+      } : { childList: true, subtree: true });
+    }
+
+    function checkRoute() {
+      const next = isTargetPage();
+      if (next === onFavorites) return false;
+      onFavorites = next;
+      observe();
+      onChange();
+      return true;
+    }
+
+    observe();
+    return checkRoute;
   }
 
   function applyWatchedVisibility(options = {}) {
@@ -53,36 +113,42 @@
     const {
       progressThreshold, progressSelector, showWatchedVideos, showShortVideos, shortVideoMinutes,
     } = normalizeSettings(options);
+    const hideWatched = featureEnabled && !showWatchedVideos;
+    const hideShort = featureEnabled && !showShortVideos;
 
     // Invalid stored selectors fall back to the built-in selector.
     let selector = progressSelector;
-    try {
-      doc.querySelector(selector);
-    } catch {
-      selector = defaults.progressSelector;
+    if (hideWatched && selector !== defaults.progressSelector) {
+      try {
+        doc.querySelector(selector);
+      } catch {
+        selector = defaults.progressSelector;
+      }
     }
 
     getEpisodeLinks(doc).forEach((anchor) => {
-      const progressBar = anchor.querySelector(selector);
       const listItem = anchor.closest('li');
-      const width = progressBar?.style.width || '';
+      const width = hideWatched ? anchor.querySelector(selector)?.style.width || '' : '';
       const progress = width.endsWith('%') ? Number(width.slice(0, -1)) : NaN;
       const isWatched = Number.isFinite(progress) && progress >= progressThreshold && progress <= 100;
-      const duration = showShortVideos ? null : getEpisodeDurationSeconds(anchor);
-      const isShortVideo = duration !== null && duration <= shortVideoMinutes * 60;
-      const shouldHide = featureEnabled && ((!showWatchedVideos && isWatched) || isShortVideo);
+      const duration = hideShort && !isWatched ? getEpisodeDurationSeconds(anchor) : null;
+      const shouldHide = isWatched || (duration !== null && duration <= shortVideoMinutes * 60);
 
-      (listItem || anchor).style.display = shouldHide ? 'none' : '';
-      if (!shouldHide) anchor.style.display = '';
+      const target = listItem || anchor;
+      const display = shouldHide ? 'none' : '';
+      if (target.style.display !== display) target.style.display = display;
+      if (!shouldHide && listItem && anchor.style.display) anchor.style.display = '';
     });
   }
 
   root.TVerWatchedProgramRemoverCore = {
     defaults,
+    favoriteToolbarSelector,
     normalizeSettings,
     parseDurationSeconds,
     getEpisodeDurationSeconds,
     getEpisodeLinks,
+    watchFavoriteChanges,
     applyWatchedVisibility,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof self !== 'undefined' ? self : window));

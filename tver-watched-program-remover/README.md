@@ -89,6 +89,7 @@ make userscript
 
 ## ChangeLog
 
+- 1.3.2: Skip unrelated page updates and stop periodically rescanning favorites in Tampermonkey.
 - 1.3.1: Use browser-default checkbox and focus colors instead of a fixed green accent.
 - 1.3.0: Add a separate on-page checkbox to show watched videos while keeping the short-video filter active.
 - 1.2.0: Add a short-video visibility checkbox and configurable duration limit beside TVer's main-episode filter in both versions.

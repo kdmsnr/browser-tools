@@ -29,12 +29,7 @@ function loadUserscript({ saved, rawValue, storageMode = 'available', pathname =
   const globals = {
     location,
     history,
-    document: { documentElement: {} },
     window: { addEventListener: (type, callback) => events.set(type, callback) },
-    MutationObserver: class {
-      constructor(callback) { onMutation = callback; }
-      observe() {}
-    },
     setTimeout: callback => pending.push(callback),
     setInterval: (callback, milliseconds) => intervals.push({ callback, milliseconds }),
     TVerWatchedProgramRemoverDurationFilter: {
@@ -63,14 +58,29 @@ function loadUserscript({ saved, rawValue, storageMode = 'available', pathname =
 
   const context = vm.createContext(globals);
   vm.runInContext(read('watched-core.js'), context);
-  context.TVerWatchedProgramRemoverCore.applyWatchedVisibility = options => calls.push({ ...options });
+  const core = context.TVerWatchedProgramRemoverCore;
+  core.applyWatchedVisibility = options => calls.push({ ...options });
+  core.watchFavoriteChanges = ({ isTargetPage, onChange }) => {
+    let onFavorites = isTargetPage();
+    const checkRoute = () => {
+      const next = isTargetPage();
+      if (next === onFavorites) return false;
+      onFavorites = next;
+      onChange();
+      return true;
+    };
+    onMutation = () => {
+      if (!checkRoute() && onFavorites) onChange();
+    };
+    return checkRoute;
+  };
   vm.runInContext(read('userscript.entry.js'), context);
 
   return {
     context, calls, updates, writes, stored, history, location, intervals, pending,
     change: settings => onChange(settings),
     dispatch: (type, event) => events.get(type)(event),
-    mutate: () => onMutation([]),
+    emitRelevantMutation: () => onMutation(),
     flush() { while (pending.length) pending.shift()(); },
     get removals() { return removals; },
   };
@@ -181,8 +191,12 @@ test('SPA navigation removes controls outside favorites and refreshes them on re
   assert.equal(runtime.removals, 1);
   assert.equal(runtime.calls.length, initialCalls);
 
+  runtime.history.pushState({}, '', '/episodes/another');
+  runtime.emitRelevantMutation();
+  assert.equal(runtime.pending.length, 0);
+
   assert.equal(runtime.history.replaceState({}, '', '/mypage/fav'), 'replace-result');
-  runtime.mutate();
+  runtime.emitRelevantMutation();
   assert.equal(runtime.pending.length, 1);
   runtime.flush();
   assert.equal(runtime.calls.length, initialCalls + 1);
@@ -192,13 +206,30 @@ test('SPA navigation removes controls outside favorites and refreshes them on re
   runtime.dispatch('popstate', {});
   runtime.flush();
   assert.equal(runtime.removals, 2);
-  const poll = runtime.intervals.find(interval => interval.milliseconds === 1500);
-  poll.callback();
-  assert.equal(runtime.pending.length, 0);
 
   runtime.location.pathname = '/mypage/fav';
   runtime.dispatch('popstate', {});
   runtime.flush();
   assert.equal(runtime.calls.length, initialCalls + 2);
   assert.equal(runtime.updates.length, 3);
+});
+
+test('relevant changes and same-route navigation coalesce without interval polling', () => {
+  const runtime = loadUserscript();
+  const initialCalls = runtime.calls.length;
+  assert.equal(runtime.intervals.length, 0);
+  assert.equal(runtime.pending.length, 0);
+
+  runtime.emitRelevantMutation();
+  runtime.emitRelevantMutation();
+  assert.equal(runtime.pending.length, 1);
+  runtime.flush();
+  assert.equal(runtime.calls.length, initialCalls + 1);
+
+  runtime.history.replaceState({}, '', '/mypage/fav?sort=oldest');
+  assert.equal(runtime.pending.length, 1);
+  runtime.emitRelevantMutation();
+  assert.equal(runtime.pending.length, 1);
+  runtime.flush();
+  assert.equal(runtime.calls.length, initialCalls + 2);
 });

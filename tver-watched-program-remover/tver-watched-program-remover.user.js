@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Remove Watched Programs for TVer
 // @namespace    https://kdmsnr.com
-// @version      1.3.1
+// @version      1.3.2
 // @description  Remove watched programs from TVer's My Page
 // @author       kdmsnr
 // @match        https://tver.jp/*
@@ -10,6 +10,12 @@
 // ==/UserScript==
 (function (root) {
   'use strict';
+
+  const legacyEpisodeSelector = 'a[class^="EpisodeItem_"]';
+  const episodeLinkSelector = 'a[href^="/episodes/"]';
+  const episodeSelector = `${legacyEpisodeSelector}, li > ${episodeLinkSelector}`;
+  const favoriteToolbarSelector = '[class^="FavoriteTool_standardOnly__"], [class*=" FavoriteTool_standardOnly__"]';
+  const favoriteChangesSelector = `${legacyEpisodeSelector}, ${episodeLinkSelector}, ${favoriteToolbarSelector}`;
 
   const defaults = Object.freeze({
     progressThreshold: 100,
@@ -50,12 +56,66 @@
   }
 
   function getEpisodeLinks(doc = document) {
-    const links = new Set();
+    return Array.from(doc.querySelectorAll(episodeSelector));
+  }
 
-    doc.querySelectorAll('a[class^="EpisodeItem_"]').forEach((link) => links.add(link));
-    doc.querySelectorAll('li > a[href^="/episodes/"]').forEach((link) => links.add(link));
+  function affectsFavorites(record, getProgressSelector) {
+    const { target, type } = record;
+    if (type === 'attributes' && record.attributeName === 'style') {
+      const progressSelector = getProgressSelector();
+      if (!progressSelector) return false;
+      const episode = target.closest(episodeSelector);
+      // Ignore display styles written by this script on the card or its list item.
+      if (!episode || target === episode) return false;
+      try {
+        return target.matches(progressSelector);
+      } catch {
+        return target.matches(defaults.progressSelector);
+      }
+    }
 
-    return [...links];
+    const element = target.nodeType === 1 ? target : target.parentElement;
+    if (element?.closest(favoriteChangesSelector)) return true;
+    if (type !== 'childList') return false;
+    for (const nodes of [record.addedNodes, record.removedNodes]) {
+      for (const node of nodes) {
+        if (node.nodeType === 1 &&
+            (node.matches(favoriteChangesSelector) || node.querySelector(favoriteChangesSelector))) return true;
+      }
+    }
+    return false;
+  }
+
+  function watchFavoriteChanges({
+    doc = document, isTargetPage, onChange, getProgressSelector = () => defaults.progressSelector,
+  }) {
+    let onFavorites = isTargetPage();
+    const target = doc.documentElement || doc.body;
+    const observer = new MutationObserver(records => {
+      if (!checkRoute() && onFavorites && records.some(record => affectsFavorites(record, getProgressSelector))) {
+        onChange();
+      }
+    });
+
+    function observe() {
+      if (!target) return;
+      observer.observe(target, onFavorites ? {
+        childList: true, subtree: true, characterData: true,
+        attributes: true, attributeFilter: ['style', 'class', 'href'],
+      } : { childList: true, subtree: true });
+    }
+
+    function checkRoute() {
+      const next = isTargetPage();
+      if (next === onFavorites) return false;
+      onFavorites = next;
+      observe();
+      onChange();
+      return true;
+    }
+
+    observe();
+    return checkRoute;
   }
 
   function applyWatchedVisibility(options = {}) {
@@ -63,36 +123,42 @@
     const {
       progressThreshold, progressSelector, showWatchedVideos, showShortVideos, shortVideoMinutes,
     } = normalizeSettings(options);
+    const hideWatched = featureEnabled && !showWatchedVideos;
+    const hideShort = featureEnabled && !showShortVideos;
 
     // Invalid stored selectors fall back to the built-in selector.
     let selector = progressSelector;
-    try {
-      doc.querySelector(selector);
-    } catch {
-      selector = defaults.progressSelector;
+    if (hideWatched && selector !== defaults.progressSelector) {
+      try {
+        doc.querySelector(selector);
+      } catch {
+        selector = defaults.progressSelector;
+      }
     }
 
     getEpisodeLinks(doc).forEach((anchor) => {
-      const progressBar = anchor.querySelector(selector);
       const listItem = anchor.closest('li');
-      const width = progressBar?.style.width || '';
+      const width = hideWatched ? anchor.querySelector(selector)?.style.width || '' : '';
       const progress = width.endsWith('%') ? Number(width.slice(0, -1)) : NaN;
       const isWatched = Number.isFinite(progress) && progress >= progressThreshold && progress <= 100;
-      const duration = showShortVideos ? null : getEpisodeDurationSeconds(anchor);
-      const isShortVideo = duration !== null && duration <= shortVideoMinutes * 60;
-      const shouldHide = featureEnabled && ((!showWatchedVideos && isWatched) || isShortVideo);
+      const duration = hideShort && !isWatched ? getEpisodeDurationSeconds(anchor) : null;
+      const shouldHide = isWatched || (duration !== null && duration <= shortVideoMinutes * 60);
 
-      (listItem || anchor).style.display = shouldHide ? 'none' : '';
-      if (!shouldHide) anchor.style.display = '';
+      const target = listItem || anchor;
+      const display = shouldHide ? 'none' : '';
+      if (target.style.display !== display) target.style.display = display;
+      if (!shouldHide && listItem && anchor.style.display) anchor.style.display = '';
     });
   }
 
   root.TVerWatchedProgramRemoverCore = {
     defaults,
+    favoriteToolbarSelector,
     normalizeSettings,
     parseDurationSeconds,
     getEpisodeDurationSeconds,
     getEpisodeLinks,
+    watchFavoriteChanges,
     applyWatchedVisibility,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : (typeof self !== 'undefined' ? self : window));
@@ -100,19 +166,21 @@
   'use strict';
 
   const controlId = 'tver-watched-remover-duration-filter';
-  const slotSelector = '[class^="FavoriteTool_standardOnly__"], [class*=" FavoriteTool_standardOnly__"]';
+  const nativeLabelText = '本編のみ表示';
 
   function create({ doc = document, onChange = () => {} } = {}) {
     const core = root.TVerWatchedProgramRemoverCore;
+    const slotSelector = core.favoriteToolbarSelector;
     let settings = core.normalizeSettings();
     let container;
+    let nativeLabel;
     let watchedCheckbox;
     let checkbox;
     let minutes;
 
     function remove() {
       container?.remove();
-      container = watchedCheckbox = checkbox = minutes = undefined;
+      container = nativeLabel = watchedCheckbox = checkbox = minutes = undefined;
     }
 
     function validMinutes(value) {
@@ -234,25 +302,38 @@
       slot.append(container);
     }
 
+    function ensureMounted() {
+      const mountedSlot = container?.parentElement;
+      if (container?.isConnected && mountedSlot?.matches(slotSelector) && nativeLabel &&
+          mountedSlot.contains(nativeLabel) && nativeLabel.textContent.trim() === nativeLabelText) {
+        return true;
+      }
+
+      for (const slot of doc.querySelectorAll(slotSelector)) {
+        const label = Array.from(slot.querySelectorAll('label')).find(
+          element => element.textContent.trim() === nativeLabelText
+        );
+        if (!label) continue;
+        if (!container?.isConnected || mountedSlot !== slot) {
+          remove();
+          mount(slot);
+        }
+        nativeLabel = label;
+        return true;
+      }
+
+      remove();
+      return false;
+    }
+
     function update(nextSettings) {
       const next = core.normalizeSettings(nextSettings);
       const thresholdChanged = settings.shortVideoMinutes !== next.shortVideoMinutes;
       settings = next;
-      const label = Array.from(doc.querySelectorAll('label')).find(
-        element => element.textContent.trim() === '本編のみ表示'
-      );
-      const slot = label?.closest(slotSelector);
-      if (!slot) {
-        remove();
-        return;
-      }
-      if (!container?.isConnected || container.parentElement !== slot) {
-        remove();
-        mount(slot);
-      }
-      watchedCheckbox.checked = settings.showWatchedVideos;
-      checkbox.checked = settings.showShortVideos;
-      // Mutation observers and userscript polling must not overwrite a number being edited.
+      if (!ensureMounted()) return;
+      if (watchedCheckbox.checked !== settings.showWatchedVideos) watchedCheckbox.checked = settings.showWatchedVideos;
+      if (checkbox.checked !== settings.showShortVideos) checkbox.checked = settings.showShortVideos;
+      // Page updates must not overwrite a number being edited.
       if (doc.activeElement !== minutes || thresholdChanged) {
         const value = String(settings.shortVideoMinutes);
         if (minutes.value !== value) minutes.value = value;
@@ -324,10 +405,14 @@
     core.applyWatchedVisibility({ featureEnabled: true, ...settings });
   }
 
-  const observer = new MutationObserver(scheduleHideWatched);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-
-  const notifyRouteChange = () => scheduleHideWatched();
+  const checkRoute = core.watchFavoriteChanges({
+    isTargetPage,
+    onChange: scheduleHideWatched,
+    getProgressSelector: () => settings.showWatchedVideos ? null : settings.progressSelector,
+  });
+  const notifyRouteChange = () => {
+    if (!checkRoute() && isTargetPage()) scheduleHideWatched();
+  };
   const originalPushState = history.pushState;
   history.pushState = function (...args) {
     const result = originalPushState.apply(this, args);
@@ -346,10 +431,6 @@
     settings = readSettings();
     hideWatched();
   });
-
-  setInterval(() => {
-    if (isTargetPage()) scheduleHideWatched();
-  }, 1500);
 
   hideWatched();
 })();

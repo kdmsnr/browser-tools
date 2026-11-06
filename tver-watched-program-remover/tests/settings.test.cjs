@@ -39,11 +39,9 @@ test('defaults and invalid saved settings preserve the original behavior', () =>
 });
 
 test('content script loads settings and reapplies sync changes, deletion and toggles', () => {
-  const core = loadCore();
   const calls = [];
   let onChanged, onMessage;
   const context = vm.createContext({
-    TVerWatchedProgramRemoverCore: {...core, applyWatchedVisibility: options => calls.push(options)},
     location: {pathname: '/mypage/fav'},
     document: {body: {}},
     MutationObserver: class { observe() {} },
@@ -64,6 +62,9 @@ test('content script loads settings and reapplies sync changes, deletion and tog
       },
     },
   });
+  vm.runInContext(read('watched-core.js'), context);
+  const core = context.TVerWatchedProgramRemoverCore;
+  core.applyWatchedVisibility = options => calls.push(options);
   vm.runInContext(read('main.js'), context);
   assert.equal(calls.at(-1).progressThreshold, 95);
   assert.equal(calls.at(-1).progressSelector, '.custom');
@@ -81,6 +82,8 @@ test('content script loads settings and reapplies sync changes, deletion and tog
   onChanged({showWatchedVideos: {newValue: true}}, 'sync');
   assert.equal(calls.at(-1).showWatchedVideos, true);
   const count = calls.length;
+  onChanged({showWatchedVideos: {newValue: true}}, 'sync');
+  assert.equal(calls.length, count, 'sync echo does not rescan the list');
   onChanged({progressThreshold: {newValue: 10}}, 'local');
   assert.equal(calls.length, count);
   onChanged({

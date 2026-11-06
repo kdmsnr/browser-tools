@@ -36,7 +36,7 @@ function makeDocument(core, episodes) {
       return null;
     },
     querySelectorAll(selector) {
-      assert.ok(['a[class^="EpisodeItem_"]', 'li > a[href^="/episodes/"]'].includes(selector));
+      assert.equal(selector, 'a[class^="EpisodeItem_"], li > a[href^="/episodes/"]');
       return rows.map(row => row.anchor);
     },
   };

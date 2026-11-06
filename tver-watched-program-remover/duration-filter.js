@@ -2,19 +2,21 @@
   'use strict';
 
   const controlId = 'tver-watched-remover-duration-filter';
-  const slotSelector = '[class^="FavoriteTool_standardOnly__"], [class*=" FavoriteTool_standardOnly__"]';
+  const nativeLabelText = '本編のみ表示';
 
   function create({ doc = document, onChange = () => {} } = {}) {
     const core = root.TVerWatchedProgramRemoverCore;
+    const slotSelector = core.favoriteToolbarSelector;
     let settings = core.normalizeSettings();
     let container;
+    let nativeLabel;
     let watchedCheckbox;
     let checkbox;
     let minutes;
 
     function remove() {
       container?.remove();
-      container = watchedCheckbox = checkbox = minutes = undefined;
+      container = nativeLabel = watchedCheckbox = checkbox = minutes = undefined;
     }
 
     function validMinutes(value) {
@@ -136,25 +138,38 @@
       slot.append(container);
     }
 
+    function ensureMounted() {
+      const mountedSlot = container?.parentElement;
+      if (container?.isConnected && mountedSlot?.matches(slotSelector) && nativeLabel &&
+          mountedSlot.contains(nativeLabel) && nativeLabel.textContent.trim() === nativeLabelText) {
+        return true;
+      }
+
+      for (const slot of doc.querySelectorAll(slotSelector)) {
+        const label = Array.from(slot.querySelectorAll('label')).find(
+          element => element.textContent.trim() === nativeLabelText
+        );
+        if (!label) continue;
+        if (!container?.isConnected || mountedSlot !== slot) {
+          remove();
+          mount(slot);
+        }
+        nativeLabel = label;
+        return true;
+      }
+
+      remove();
+      return false;
+    }
+
     function update(nextSettings) {
       const next = core.normalizeSettings(nextSettings);
       const thresholdChanged = settings.shortVideoMinutes !== next.shortVideoMinutes;
       settings = next;
-      const label = Array.from(doc.querySelectorAll('label')).find(
-        element => element.textContent.trim() === '本編のみ表示'
-      );
-      const slot = label?.closest(slotSelector);
-      if (!slot) {
-        remove();
-        return;
-      }
-      if (!container?.isConnected || container.parentElement !== slot) {
-        remove();
-        mount(slot);
-      }
-      watchedCheckbox.checked = settings.showWatchedVideos;
-      checkbox.checked = settings.showShortVideos;
-      // Mutation observers and userscript polling must not overwrite a number being edited.
+      if (!ensureMounted()) return;
+      if (watchedCheckbox.checked !== settings.showWatchedVideos) watchedCheckbox.checked = settings.showWatchedVideos;
+      if (checkbox.checked !== settings.showShortVideos) checkbox.checked = settings.showShortVideos;
+      // Page updates must not overwrite a number being edited.
       if (doc.activeElement !== minutes || thresholdChanged) {
         const value = String(settings.shortVideoMinutes);
         if (minutes.value !== value) minutes.value = value;

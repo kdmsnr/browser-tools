@@ -58,10 +58,14 @@
     core.applyWatchedVisibility({ featureEnabled: true, ...settings });
   }
 
-  const observer = new MutationObserver(scheduleHideWatched);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-
-  const notifyRouteChange = () => scheduleHideWatched();
+  const checkRoute = core.watchFavoriteChanges({
+    isTargetPage,
+    onChange: scheduleHideWatched,
+    getProgressSelector: () => settings.showWatchedVideos ? null : settings.progressSelector,
+  });
+  const notifyRouteChange = () => {
+    if (!checkRoute() && isTargetPage()) scheduleHideWatched();
+  };
   const originalPushState = history.pushState;
   history.pushState = function (...args) {
     const result = originalPushState.apply(this, args);
@@ -80,10 +84,6 @@
     settings = readSettings();
     hideWatched();
   });
-
-  setInterval(() => {
-    if (isTargetPage()) scheduleHideWatched();
-  }, 1500);
 
   hideWatched();
 })();

@@ -3,10 +3,10 @@ const root = typeof globalThis !== 'undefined' ? globalThis : (typeof self !== '
 if (!root.__tverWatchedRemoverInitialized) {
   root.__tverWatchedRemoverInitialized = true;
 
-  let observer;
+  const core = root.TVerWatchedProgramRemoverCore;
   let durationFilter;
   let featureEnabled = true;
-  let settings = root.TVerWatchedProgramRemoverCore.normalizeSettings();
+  let settings = core.normalizeSettings();
   let scheduled = false;
 
   function isTargetPage() {
@@ -14,8 +14,6 @@ if (!root.__tverWatchedRemoverInitialized) {
   }
 
   function applyVisibility() {
-    const core = root.TVerWatchedProgramRemoverCore;
-    if (!core) return;
     if (!isTargetPage()) {
       durationFilter?.remove();
       return;
@@ -46,24 +44,8 @@ if (!root.__tverWatchedRemoverInitialized) {
     });
   }
 
-  function initObserver() {
-    if (observer) return;
-    observer = new MutationObserver(() => {
-      if (!isTargetPage()) {
-        durationFilter?.remove();
-        return;
-      }
-      scheduleApplyVisibility();
-    });
-
-    const target = document.body || document.documentElement;
-    if (target) {
-      observer.observe(target, { childList: true, subtree: true });
-    }
-  }
-
   chrome.runtime.onMessage.addListener((message) => {
-    if (message.type === 'toggleFeature') {
+    if (message.type === 'toggleFeature' && message.featureEnabled !== featureEnabled) {
       featureEnabled = message.featureEnabled;
       applyVisibility();
     }
@@ -71,18 +53,26 @@ if (!root.__tverWatchedRemoverInitialized) {
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'sync') return;
-    if (changes.featureEnabled) featureEnabled = changes.featureEnabled.newValue ?? true;
+    const nextEnabled = changes.featureEnabled ? changes.featureEnabled.newValue ?? true : featureEnabled;
+    const updated = { ...settings };
     for (const key of Object.keys(settings)) {
-      if (changes[key]) settings[key] = changes[key].newValue;
+      if (changes[key]) updated[key] = changes[key].newValue;
     }
-    settings = root.TVerWatchedProgramRemoverCore.normalizeSettings(settings);
+    const nextSettings = core.normalizeSettings(updated);
+    if (nextEnabled === featureEnabled && Object.keys(settings).every(key => settings[key] === nextSettings[key])) return;
+    featureEnabled = nextEnabled;
+    settings = nextSettings;
     applyVisibility();
   });
 
   chrome.storage.sync.get(['featureEnabled', ...Object.keys(settings)], (result) => {
     featureEnabled = result.featureEnabled ?? true;
-    settings = root.TVerWatchedProgramRemoverCore.normalizeSettings(result);
-    initObserver();
+    settings = core.normalizeSettings(result);
+    core.watchFavoriteChanges({
+      isTargetPage,
+      onChange: scheduleApplyVisibility,
+      getProgressSelector: () => featureEnabled && !settings.showWatchedVideos ? settings.progressSelector : null,
+    });
     applyVisibility();
   });
 }
