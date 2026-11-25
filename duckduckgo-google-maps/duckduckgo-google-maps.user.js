@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         DuckDuckGoの地図をGoogleマップで開く
 // @namespace    https://kdmsnr.com
-// @version      1.1.0
-// @description  DuckDuckGoの「地図」リンクの行き先を、同じ検索語のGoogleマップに変更します。
+// @version      1.2.0
+// @description  DuckDuckGoの「マップ」を「Google マップ」に変更し、同じ検索語で開きます。
 // @match        https://duckduckgo.com/*
 // @match        https://www.duckduckgo.com/*
 // @run-at       document-start
@@ -34,11 +34,28 @@
     return target.href;
   }
 
+  function updateTabLabel(link) {
+    if (!link.closest('nav, [role="navigation"]')) return;
+    const labels = { 'マップ': 'Google マップ', '地図': 'Google マップ', Maps: 'Google Maps' };
+    const name = link.textContent.trim();
+    if (!Object.hasOwn(labels, name)) return;
+
+    const nodes = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
+    while (nodes.nextNode()) {
+      const node = nodes.currentNode;
+      if (node.data.trim() === name) node.data = node.data.replace(name, labels[name]);
+    }
+    for (const attr of ['aria-label', 'title']) {
+      if (link.getAttribute(attr) === name) link.setAttribute(attr, labels[name]);
+    }
+  }
+
   function rewriteLink(link) {
     const target = googleMapsUrl(link);
     if (!target) return;
     link.href = target;
     rewrittenLinks.set(link, target);
+    updateTabLabel(link);
   }
 
   function rewriteLinksIn(root) {
@@ -48,28 +65,35 @@
 
   const observer = new MutationObserver((records) => {
     for (const record of records) {
-      if (record.type === 'childList') {
-        record.addedNodes.forEach(rewriteLinksIn);
-      } else if (record.target.matches(mapLinkSelector)) {
-        rewriteLink(record.target);
+      if (record.type === 'attributes') {
+        if (record.target.matches(mapLinkSelector)) rewriteLink(record.target);
+        continue;
       }
+      record.addedNodes.forEach(rewriteLinksIn);
+      const element = record.type === 'characterData' ? record.target.parentElement : record.target;
+      const link = element?.closest?.('a[href]');
+      if (link && rewrittenLinks.get(link) === link.href) updateTabLabel(link);
     }
   });
-  observer.observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['href'] });
+  observer.observe(document, { childList: true, characterData: true, subtree: true, attributeFilter: ['href'] });
   rewriteLinksIn(document);
 
   // DuckDuckGoのクリック処理を止め、書き換えたリンクをブラウザに開かせる。
-  window.addEventListener('click', (event) => {
+  function handleMapLink(event) {
     const link = event.target.closest?.('a[href]');
-    if (link && rewrittenLinks.get(link) === link.href) event.stopImmediatePropagation();
-  }, true);
+    if (!link) return;
+    if (link.matches(mapLinkSelector)) rewriteLink(link);
+    if (rewrittenLinks.get(link) === link.href) event.stopImmediatePropagation();
+  }
+  window.addEventListener('click', handleMapLink, true);
+  window.addEventListener('contextmenu', handleMapLink, true);
 
   function openGoogleMaps() {
     const target = googleMapsUrl(location);
     if (target) location.replace(target);
   }
 
-  // DuckDuckGoはページを再読み込みせずに「地図」へ切り替えることがある。
+  // DuckDuckGoはページを再読み込みせずに「マップ」へ切り替えることがある。
   if (window.navigation) {
     window.navigation.addEventListener('currententrychange', openGoogleMaps);
   } else {
