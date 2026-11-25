@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DuckDuckGoの地図をGoogleマップで開く
 // @namespace    https://kdmsnr.com
-// @version      1.2.0
+// @version      1.2.1
 // @description  DuckDuckGoの「マップ」を「Google マップ」に変更し、同じ検索語で開きます。
 // @match        https://duckduckgo.com/*
 // @match        https://www.duckduckgo.com/*
@@ -35,7 +35,7 @@
   }
 
   function updateTabLabel(link) {
-    if (!link.closest('nav, [role="navigation"]')) return;
+    if (!link.closest('nav, [role="navigation"], [role="menu"]')) return;
     const labels = { 'マップ': 'Google マップ', '地図': 'Google マップ', Maps: 'Google Maps' };
     const name = link.textContent.trim();
     if (!Object.hasOwn(labels, name)) return;
